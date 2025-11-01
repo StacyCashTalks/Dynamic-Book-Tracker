@@ -1,0 +1,293 @@
+@page "/books"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize]
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<PageTitle>Books</PageTitle>
+
+<h1>Book Library</h1>
+
+@if (notification != null)
+{
+    <div class="alert alert-info alert-dismissible fade show" role="alert">
+        @notification
+        <button type="button" class="btn-close" @onclick="@(() => notification = null)"></button>
+    </div>
+}
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="ShowAddBookForm">Add New Book</button>
+</div>
+
+@if (showAddForm)
+{
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">Add New Book</h5>
+            <EditForm Model="newBook" OnValidSubmit="AddBook">
+                <div class="mb-3">
+                    <label class="form-label">Name</label>
+                    <InputText class="form-control" @bind-Value="newBook.Name" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Author</label>
+                    <InputText class="form-control" @bind-Value="newBook.Author" />
+                </div>
+                <button type="submit" class="btn btn-success">Save</button>
+                <button type="button" class="btn btn-secondary" @onclick="@(() => showAddForm = false)">Cancel</button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (books == null)
+{
+    <p><em>Loading...</em></p>
+}
+else if (!books.Any())
+{
+    <p>No books available. Add your first book!</p>
+}
+else
+{
+    <div class="row">
+        @foreach (var book in books)
+        {
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">@book.Name</h5>
+                        <p class="card-text">
+                            <strong>Author:</strong> @book.Author<br/>
+                            <strong>Status:</strong>
+                            @if (book.InStock)
+                            {
+                                <span class="badge bg-success">Available</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger">Borrowed</span>
+                            }
+                        </p>
+
+                        <AuthorizeView>
+                            @if (book.OwnerId == context.User.Claims.FirstOrDefault(c => c.Type == "sub")?.Value)
+                            {
+                                <div class="mb-2">
+                                    <span class="badge bg-info">Your Book</span>
+                                </div>
+                                @if (!book.InStock)
+                                {
+                                    <button class="btn btn-sm btn-warning" @onclick="@(() => ReturnBook(book.Id))">Mark as Returned</button>
+                                }
+                                <button class="btn btn-sm btn-danger" @onclick="@(() => DeleteBook(book.Id))">Delete</button>
+                            }
+                            else
+                            {
+                                @if (book.InStock)
+                                {
+                                    <button class="btn btn-sm btn-primary" @onclick="@(() => BorrowBook(book.Id))">Borrow</button>
+                                }
+                                else
+                                {
+                                    @if (book.LoanedToUserId == context.User.Claims.FirstOrDefault(c => c.Type == "sub")?.Value)
+                                    {
+                                        <button class="btn btn-sm btn-warning" @onclick="@(() => ReturnBook(book.Id))">Return</button>
+                                    }
+                                    else
+                                    {
+                                        @if (watchList.Any(w => w.BookId == book.Id))
+                                        {
+                                            <button class="btn btn-sm btn-secondary" @onclick="@(() => UnwatchBook(book.Id))">Unwatch</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-outline-primary" @onclick="@(() => WatchBook(book.Id))">Notify Me</button>
+                                        }
+                                    }
+                                }
+                            }
+                        </AuthorizeView>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<Book>? books;
+    private List<WatchList>? watchList = new();
+    private Book newBook = new();
+    private bool showAddForm = false;
+    private string? notification;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBooks();
+        await LoadWatchList();
+    }
+
+    private async Task LoadBooks()
+    {
+        try
+        {
+            books = await Http.GetFromJsonAsync<List<Book>>("/api/books");
+        }
+        catch (Exception ex)
+        {
+            notification = $"Error loading books: {ex.Message}";
+        }
+    }
+
+    private async Task LoadWatchList()
+    {
+        try
+        {
+            watchList = await Http.GetFromJsonAsync<List<WatchList>>("/api/watchlist");
+        }
+        catch (Exception ex)
+        {
+            notification = $"Error loading watch list: {ex.Message}";
+        }
+    }
+
+    private void ShowAddBookForm()
+    {
+        newBook = new Book();
+        showAddForm = true;
+    }
+
+    private async Task AddBook()
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/books", newBook);
+            if (response.IsSuccessStatusCode)
+            {
+                notification = "Book added successfully!";
+                showAddForm = false;
+                await LoadBooks();
+            }
+            else
+            {
+                notification = "Error adding book";
+            }
+        }
+        catch (Exception ex)
+        {
+            notification = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task BorrowBook(string bookId)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"/api/books/{bookId}/borrow", null);
+            if (response.IsSuccessStatusCode)
+            {
+                notification = "Book borrowed successfully!";
+                await LoadBooks();
+            }
+            else
+            {
+                notification = "Error borrowing book";
+            }
+        }
+        catch (Exception ex)
+        {
+            notification = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task ReturnBook(string bookId)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"/api/books/{bookId}/return", null);
+            if (response.IsSuccessStatusCode)
+            {
+                notification = "Book returned successfully!";
+                await LoadBooks();
+            }
+            else
+            {
+                notification = "Error returning book";
+            }
+        }
+        catch (Exception ex)
+        {
+            notification = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteBook(string bookId)
+    {
+        try
+        {
+            var confirmed = await JS.InvokeAsync<bool>("confirm", "Are you sure you want to delete this book?");
+            if (confirmed)
+            {
+                var response = await Http.DeleteAsync($"/api/books/{bookId}");
+                if (response.IsSuccessStatusCode)
+                {
+                    notification = "Book deleted successfully!";
+                    await LoadBooks();
+                }
+                else
+                {
+                    notification = "Error deleting book";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            notification = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task WatchBook(string bookId)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"/api/watchlist/{bookId}", null);
+            if (response.IsSuccessStatusCode)
+            {
+                notification = "You'll be notified when this book is available!";
+                await LoadWatchList();
+            }
+            else
+            {
+                notification = "Error adding to watch list";
+            }
+        }
+        catch (Exception ex)
+        {
+            notification = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task UnwatchBook(string bookId)
+    {
+        try
+        {
+            var response = await Http.DeleteAsync($"/api/watchlist/{bookId}");
+            if (response.IsSuccessStatusCode)
+            {
+                notification = "Removed from watch list";
+                await LoadWatchList();
+            }
+            else
+            {
+                notification = "Error removing from watch list";
+            }
+        }
+        catch (Exception ex)
+        {
+            notification = $"Error: {ex.Message}";
+        }
+    }
+}
