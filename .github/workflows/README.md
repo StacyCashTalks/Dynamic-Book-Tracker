@@ -11,7 +11,9 @@ This workflow creates the necessary Azure infrastructure for the Function App.
 **Trigger:** Manual (`workflow_dispatch`)
 
 **Required Secrets:**
-- `AZURE_CREDENTIALS` - Azure service principal credentials in JSON format
+- `AZURE_CLIENT_ID` - Azure service principal client ID
+- `AZURE_DIRECTORY_ID` - Azure tenant/directory ID
+- `AZURE_SUBSCRIPTION_ID` - Azure subscription ID
 - `AZURE_RESOURCE_GROUP` - Base name of the Azure resource group (environment suffix will be added)
 - `AZURE_FUNCTION_APP_NAME` - Base name of the Azure Function App (environment suffix will be added)
 - `AZURE_LOCATION` - Azure region (e.g., `eastus`, `westeurope`)
@@ -19,8 +21,8 @@ This workflow creates the necessary Azure infrastructure for the Function App.
 
 **What it does:**
 - Creates an Azure Resource Group with environment suffix (e.g., `rg-booktracker-dev`)
-- Creates a Storage Account with environment suffix (e.g., `stbooktrackerproddev`)
-- Creates an Azure Function App with environment suffix (e.g., `func-booktracker-api-staging`)
+- Creates a Storage Account with environment suffix (e.g., `stbooktrackerdev`)
+- Creates an Azure Function App with environment suffix (e.g., `func-booktracker-api-dev`)
 - Configures the Function App with:
   - Consumption plan
   - .NET 8 runtime
@@ -46,7 +48,9 @@ This workflow builds and deploys the Azure Function application.
 - Manual (`workflow_dispatch`) - allows selecting target environment
 
 **Required Secrets:**
-- `AZURE_CREDENTIALS` - Azure service principal credentials
+- `AZURE_CLIENT_ID` - Azure service principal client ID
+- `AZURE_DIRECTORY_ID` - Azure tenant/directory ID
+- `AZURE_SUBSCRIPTION_ID` - Azure subscription ID
 - `AZURE_FUNCTION_APP_NAME` - Base name of the Azure Function App (environment suffix will be added)
 
 **What it does:**
@@ -63,25 +67,28 @@ This workflow builds and deploys the Azure Function application.
 
 ## Setup Instructions
 
-### 1. Create Azure Service Principal
+### 1. Create Azure Service Principal and Configure OIDC
 
 ```bash
+# Create the service principal
 az ad sp create-for-rbac --name "github-actions-sp" --role contributor \
-    --scopes /subscriptions/{subscription-id}/resourceGroups/{resource-group-name} \
-    --sdk-auth
-```
+    --scopes /subscriptions/{subscription-id}/resourceGroups/{resource-group-name}
 
-Copy the JSON output and save it as the `AZURE_CREDENTIALS` secret.
+# Note the appId (client ID), tenant (directory ID) from the output
+# Also note your subscription ID
+```
 
 ### 2. Configure GitHub Secrets
 
 Go to your repository Settings → Secrets and variables → Actions, and add:
 
-1. **AZURE_CREDENTIALS**: The JSON output from the service principal creation
-2. **AZURE_RESOURCE_GROUP**: Base name for your resource group (e.g., `rg-booktracker`)
-3. **AZURE_FUNCTION_APP_NAME**: Base name for your function app (e.g., `func-booktracker-api`)
-4. **AZURE_LOCATION**: Azure region (e.g., `eastus`)
-5. **AZURE_STORAGE_ACCOUNT_NAME**: Base name for storage account (e.g., `stbooktracker`)
+1. **AZURE_CLIENT_ID**: The appId from the service principal creation
+2. **AZURE_DIRECTORY_ID**: The tenant ID from the service principal
+3. **AZURE_SUBSCRIPTION_ID**: Your Azure subscription ID
+4. **AZURE_RESOURCE_GROUP**: Base name for your resource group (e.g., `rg-booktracker`)
+5. **AZURE_FUNCTION_APP_NAME**: Base name for your function app (e.g., `func-booktracker-api`)
+6. **AZURE_LOCATION**: Azure region (e.g., `eastus`)
+7. **AZURE_STORAGE_ACCOUNT_NAME**: Base name for storage account (e.g., `stbooktracker`)
 
 **Note:** The workflows will automatically append environment suffixes to these base names (e.g., `rg-booktracker-dev`, `func-booktracker-api-production`).
 
@@ -112,4 +119,4 @@ Dynamic-Book-Tracker/
 - The provisioning workflow can be run multiple times (includes idempotency checks)
 - Storage account names must be globally unique and contain only lowercase letters and numbers
 - Both workflows support multi-environment deployments via environment suffixes
-- Artifacts are retained for 7 days for troubleshooting purposes
+- Uses OIDC authentication for enhanced security
