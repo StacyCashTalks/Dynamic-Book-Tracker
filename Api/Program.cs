@@ -1,4 +1,5 @@
 using Api;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.Configuration;
@@ -12,6 +13,11 @@ builder.ConfigureFunctionsWebApplication();
 builder.Services
     .AddApplicationInsightsTelemetryWorkerService()
     .ConfigureFunctionsApplicationInsights();
+
+builder.Services.Configure<CosmosSerializationOptions>(options =>
+{
+    options.PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase;
+});
 
 builder.Services.AddSingleton<WebPubSub>();
 

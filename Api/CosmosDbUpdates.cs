@@ -1,8 +1,6 @@
 using System.Text.Json;
 using Azure.Messaging.WebPubSub;
-using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Shared.Models;
 
@@ -12,28 +10,22 @@ public class CosmosDbUpdates
 {
     private readonly ILogger<CosmosDbUpdates> _logger;
     private readonly WebPubSubServiceClient _webPubSubClient;
-    private readonly Container _watchListContainer;
 
-    public CosmosDbUpdates(ILogger<CosmosDbUpdates> logger, WebPubSub webPubSub, IConfiguration configuration)
+    public CosmosDbUpdates(ILogger<CosmosDbUpdates> logger, WebPubSub webPubSub)
     {
         _logger = logger;
         _webPubSubClient = webPubSub.Client;
-
-        var cosmosClient = new CosmosClient(configuration["CosmosDbConnectionString"]);
-        var databaseName = configuration["CosmosDbDatabaseName"] ?? "BookTracker";
-        var database = cosmosClient.GetDatabase(databaseName);
-        _watchListContainer = database.GetContainer("WatchList");
     }
 
     [Function("BookUpdates")]
     public async Task Run([CosmosDBTrigger(
         databaseName: "%CosmosDbDatabaseName%",
-        containerName: "Books",
+        containerName: "%CosmosDbBooksContainerName%",
         Connection = "CosmosDbConnectionString",
         LeaseContainerName = "leases",
         CreateLeaseContainerIfNotExists = true)] IReadOnlyList<Book> input)
     {
-        if (input != null && input.Count > 0)
+        if (input.Count > 0)
         {
             _logger.LogInformation($"Books modified: {input.Count}");
 
@@ -57,35 +49,20 @@ public class CosmosDbUpdates
                         JsonSerializer.Serialize(ownerNotification),
                         Azure.Core.ContentType.ApplicationJson);
 
-                    // Notify users on the watchlist
-                    var query = new QueryDefinition("SELECT * FROM c WHERE c.BookId = @bookId")
-                        .WithParameter("@bookId", book.Id);
-
-                    var iterator = _watchListContainer.GetItemQueryIterator<WatchList>(query);
-                    var watchList = new List<WatchList>();
-
-                    while (iterator.HasMoreResults)
+                    // Notify all users watching this book via group message
+                    var watcherNotification = new Notification
                     {
-                        var response = await iterator.ReadNextAsync();
-                        watchList.AddRange(response);
-                    }
+                        Type = "BookAvailable",
+                        Message = $"The book '{book.Name}' by {book.Author} is now available!",
+                        Book = book
+                    };
 
-                    _logger.LogInformation($"Notifying {watchList.Count} users on watchlist for book {book.Name}");
+                    await _webPubSubClient.SendToGroupAsync(
+                        book.Id,
+                        JsonSerializer.Serialize(watcherNotification),
+                        Azure.Core.ContentType.ApplicationJson);
 
-                    foreach (var watch in watchList)
-                    {
-                        var watcherNotification = new Notification
-                        {
-                            Type = "BookAvailable",
-                            Message = $"The book '{book.Name}' by {book.Author} is now available!",
-                            Book = book
-                        };
-
-                        await _webPubSubClient.SendToUserAsync(
-                            watch.UserId,
-                            JsonSerializer.Serialize(watcherNotification),
-                            Azure.Core.ContentType.ApplicationJson);
-                    }
+                    _logger.LogInformation($"Sent availability notification to group {book.Id} for book {book.Name}");
                 }
                 else
                 {

@@ -14,18 +14,24 @@ public class BookFunctions
 {
     private readonly ILogger<BookFunctions> _logger;
     private readonly Container _booksContainer;
-    private readonly Container _watchListContainer;
 
     public BookFunctions(ILogger<BookFunctions> logger, IConfiguration configuration)
     {
         _logger = logger;
 
-        var cosmosClient = new CosmosClient(configuration["CosmosDbConnectionString"]);
+        var options = new CosmosClientOptions
+        {
+            SerializerOptions = new CosmosSerializationOptions
+            {
+                PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
+            }
+        };
+        var cosmosClient = new CosmosClient(configuration["CosmosDbConnectionString"], options);
         var databaseName = configuration["CosmosDbDatabaseName"] ?? "BookTracker";
+        var containerName = configuration["CosmosDbContainerName"] ?? "Books";
         var database = cosmosClient.GetDatabase(databaseName);
 
-        _booksContainer = database.GetContainer("Books");
-        _watchListContainer = database.GetContainer("WatchList");
+        _booksContainer = database.GetContainer(containerName);
     }
 
     [Function("GetBooks")]
@@ -52,7 +58,7 @@ public class BookFunctions
 
     [Function("GetBook")]
     public async Task<IActionResult> GetBook(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "books/{id}")] HttpRequest req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "books/{id}/{owner}")] HttpRequest req,
         string id)
     {
         if (!StaticWebAppApiAuthentication.TryParseHttpHeaderForClientPrincipal(req.Headers, out var user))
@@ -62,7 +68,7 @@ public class BookFunctions
 
         try
         {
-            var response = await _booksContainer.ReadItemAsync<Book>(id, new PartitionKey(id));
+            var response = await _booksContainer.ReadItemAsync<Book>(id, new PartitionKey(user!.UserId));
             return new OkObjectResult(response.Resource);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -80,7 +86,7 @@ public class BookFunctions
             return new UnauthorizedResult();
         }
 
-        var book = await JsonSerializer.DeserializeAsync<Book>(req.Body);
+        var book = await JsonSerializer.DeserializeAsync<Book>(req.Body, JsonSettings.CamelCaseOptions);
         if (book == null)
         {
             return new BadRequestObjectResult("Invalid book data");
@@ -89,7 +95,7 @@ public class BookFunctions
         book.Id = Guid.NewGuid().ToString();
         book.OwnerId = user!.UserId!;
 
-        var response = await _booksContainer.CreateItemAsync(book, new PartitionKey(book.Id));
+        var response = await _booksContainer.CreateItemAsync(book, new PartitionKey(book.OwnerId));
         return new CreatedResult($"/api/books/{book.Id}", response.Resource);
     }
 
@@ -105,9 +111,9 @@ public class BookFunctions
 
         try
         {
-            var existingBook = await _booksContainer.ReadItemAsync<Book>(id, new PartitionKey(id));
+            var existingBook = await _booksContainer.ReadItemAsync<Book>(id, new PartitionKey(user!.UserId));
 
-            var updatedBook = await JsonSerializer.DeserializeAsync<Book>(req.Body);
+            var updatedBook = await JsonSerializer.DeserializeAsync<Book>(req.Body, JsonSettings.CamelCaseOptions);
             if (updatedBook == null)
             {
                 return new BadRequestObjectResult("Invalid book data");
@@ -117,7 +123,7 @@ public class BookFunctions
             updatedBook.Id = id;
             updatedBook.OwnerId = existingBook.Resource.OwnerId;
 
-            var response = await _booksContainer.ReplaceItemAsync(updatedBook, id, new PartitionKey(id));
+            var response = await _booksContainer.ReplaceItemAsync(updatedBook, id, new PartitionKey(updatedBook.OwnerId));
             return new OkObjectResult(response.Resource);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -128,8 +134,8 @@ public class BookFunctions
 
     [Function("BorrowBook")]
     public async Task<IActionResult> BorrowBook(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "books/{id}/borrow")] HttpRequest req,
-        string id)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "books/{id}/{owner}/borrow")] HttpRequest req,
+        string id, string owner)
     {
         if (!StaticWebAppApiAuthentication.TryParseHttpHeaderForClientPrincipal(req.Headers, out var user))
         {
@@ -138,7 +144,7 @@ public class BookFunctions
 
         try
         {
-            var response = await _booksContainer.ReadItemAsync<Book>(id, new PartitionKey(id));
+            var response = await _booksContainer.ReadItemAsync<Book>(id, new PartitionKey(owner));
             var book = response.Resource;
 
             if (!book.InStock)
@@ -149,7 +155,7 @@ public class BookFunctions
             book.InStock = false;
             book.LoanedToUserId = user!.UserId!;
 
-            var updateResponse = await _booksContainer.ReplaceItemAsync(book, id, new PartitionKey(id));
+            var updateResponse = await _booksContainer.ReplaceItemAsync(book, id, new PartitionKey(book.OwnerId));
             return new OkObjectResult(updateResponse.Resource);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -160,8 +166,8 @@ public class BookFunctions
 
     [Function("ReturnBook")]
     public async Task<IActionResult> ReturnBook(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "books/{id}/return")] HttpRequest req,
-        string id)
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "books/{id}/{owner}/return")] HttpRequest req,
+        string id, string owner)
     {
         if (!StaticWebAppApiAuthentication.TryParseHttpHeaderForClientPrincipal(req.Headers, out var user))
         {
@@ -170,7 +176,7 @@ public class BookFunctions
 
         try
         {
-            var response = await _booksContainer.ReadItemAsync<Book>(id, new PartitionKey(id));
+            var response = await _booksContainer.ReadItemAsync<Book>(id, new PartitionKey(owner));
             var book = response.Resource;
 
             if (book.InStock)
@@ -186,7 +192,7 @@ public class BookFunctions
             book.InStock = true;
             book.LoanedToUserId = null;
 
-            var updateResponse = await _booksContainer.ReplaceItemAsync(book, id, new PartitionKey(id));
+            var updateResponse = await _booksContainer.ReplaceItemAsync(book, id, new PartitionKey(book.OwnerId));
             return new OkObjectResult(updateResponse.Resource);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -207,7 +213,7 @@ public class BookFunctions
 
         try
         {
-            var response = await _booksContainer.ReadItemAsync<Book>(id, new PartitionKey(id));
+            var response = await _booksContainer.ReadItemAsync<Book>(id, new PartitionKey(user!.UserId));
             var book = response.Resource;
 
             if (book.OwnerId != user!.UserId)
@@ -215,12 +221,12 @@ public class BookFunctions
                 return new UnauthorizedObjectResult("You can only delete your own books");
             }
 
-            await _booksContainer.DeleteItemAsync<Book>(id, new PartitionKey(id));
+            await _booksContainer.DeleteItemAsync<Book>(id, new PartitionKey(book.OwnerId));
             return new NoContentResult();
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            return new NotFoundResult();
+            return new NoContentResult();
         }
     }
 }

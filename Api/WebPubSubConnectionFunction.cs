@@ -1,15 +1,35 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Shared.Models;
 using StacyClouds.SwaAuth.Api;
 
 namespace Api;
 
-public class WebPubSubConnectionFunction(
-    ILogger<WebPubSubConnectionFunction> logger, 
-    WebPubSub webPubSub)
+public class WebPubSubConnectionFunction
 {
+    private readonly ILogger<WebPubSubConnectionFunction> _logger;
+    private readonly WebPubSub _webPubSub;
+    private readonly Container _watchListContainer;
+
+    public WebPubSubConnectionFunction(
+        ILogger<WebPubSubConnectionFunction> logger,
+        WebPubSub webPubSub,
+        IConfiguration configuration)
+    {
+        _logger = logger;
+        _webPubSub = webPubSub;
+
+        var cosmosClient = new CosmosClient(configuration["CosmosDbConnectionString"]);
+        var databaseName = configuration["CosmosDbDatabaseName"] ?? "BookTracker";
+        var containerName = configuration["CosmosDbContainerName"] ?? "WatchList";
+        var database = cosmosClient.GetDatabase(databaseName);
+        _watchListContainer = database.GetContainer("WatchList");
+    }
+    
     [Function("negotiate")]
     public async Task<IActionResult> GetConnection(
         [HttpTrigger(
@@ -25,12 +45,41 @@ public class WebPubSubConnectionFunction(
             {
                 return new UnauthorizedResult();
             }
-            
-            var webPubSubServiceClient = webPubSub.Client;
+
+            var webPubSubServiceClient = _webPubSub.Client;
+
+            // Get all books the user is watching
+            var query = new QueryDefinition("SELECT * FROM c WHERE c.UserId = @userId")
+                .WithParameter("@userId", user!.UserId);
+
+            var iterator = _watchListContainer.GetItemQueryIterator<WatchList>(query);
+            var watchList = new List<WatchList>();
+
+            while (iterator.HasMoreResults)
+            {
+                var watchListResponse = await iterator.ReadNextAsync();
+                watchList.AddRange(watchListResponse);
+            }
+
+            _logger.LogInformation($"User {user.UserId} is watching {watchList.Count} books");
+
+            // Add user to each book group they're watching
+            foreach (var watch in watchList)
+            {
+                try
+                {
+                    await webPubSubServiceClient.AddUserToGroupAsync(watch.BookId, user.UserId);
+                    _logger.LogInformation($"Added user {user.UserId} to group {watch.BookId}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Failed to add user {user.UserId} to group {watch.BookId}");
+                }
+            }
 
             // Generate connection URL - this is what the client will use to connect directly to Web PubSub
             var connectionUri = await webPubSubServiceClient.GetClientAccessUriAsync(
-                userId: user!.UserId,
+                userId: user.UserId,
                 roles: [],
                 expiresAfter: TimeSpan.FromHours(1)
             );
@@ -44,7 +93,7 @@ public class WebPubSubConnectionFunction(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error generating Web PubSub connection");
+            _logger.LogError(ex, "Error generating Web PubSub connection");
             return new StatusCodeResult(500);
         }
     }
