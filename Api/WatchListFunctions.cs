@@ -100,7 +100,7 @@ public class WatchListFunctions
             return new UnauthorizedResult();
         }
 
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.BookId = @bookId AND c.UserId = @userId")
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.bookId = @bookId AND c.userId = @userId")
             .WithParameter("@bookId", bookId)
             .WithParameter("@userId", user!.UserId);
 
