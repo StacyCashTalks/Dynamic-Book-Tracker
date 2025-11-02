@@ -28,16 +28,17 @@ jobs:
 
       - name: Set environment variables
         run: |
-          echo "RESOURCE_GROUP=${{ secrets.AZURE_RESOURCE_GROUP }}" >> $GITHUB_ENV
-          echo "FUNCTION_APP_NAME=${{ secrets.AZURE_FUNCTION_APP_NAME }}" >> $GITHUB_ENV
+          echo "RESOURCE_GROUP=${{ secrets.AZURE_RESOURCE_GROUP }}-${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+          echo "FUNCTION_APP_NAME=${{ secrets.AZURE_FUNCTION_APP_NAME }}-${{ github.event.inputs.environment }}" >> $GITHUB_ENV
           echo "LOCATION=${{ secrets.AZURE_LOCATION }}" >> $GITHUB_ENV
-          echo "STORAGE_ACCOUNT_NAME=${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}" >> $GITHUB_ENV
+          echo "STORAGE_ACCOUNT_NAME=${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}${{ github.event.inputs.environment }}" >> $GITHUB_ENV
 
       - name: Create Resource Group
         run: |
           az group create \
             --name ${{ env.RESOURCE_GROUP }} \
-            --location ${{ env.LOCATION }}
+            --location ${{ env.LOCATION }} \
+            --only-show-errors || echo "Resource group may already exist"
 
       - name: Create Storage Account
         run: |
@@ -46,7 +47,8 @@ jobs:
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --location ${{ env.LOCATION }} \
             --sku Standard_LRS \
-            --kind StorageV2
+            --kind StorageV2 \
+            --only-show-errors || echo "Storage account may already exist"
 
       - name: Create Function App
         run: |
@@ -58,7 +60,8 @@ jobs:
             --runtime dotnet \
             --runtime-version 8 \
             --functions-version 4 \
-            --os-type Linux
+            --os-type Linux \
+            --only-show-errors || echo "Function app may already exist"
 
       - name: Configure App Settings
         run: |

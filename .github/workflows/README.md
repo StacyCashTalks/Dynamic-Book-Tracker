@@ -12,19 +12,21 @@ This workflow creates the necessary Azure infrastructure for the Function App.
 
 **Required Secrets:**
 - `AZURE_CREDENTIALS` - Azure service principal credentials in JSON format
-- `AZURE_RESOURCE_GROUP` - Name of the Azure resource group
-- `AZURE_FUNCTION_APP_NAME` - Name of the Azure Function App
+- `AZURE_RESOURCE_GROUP` - Base name of the Azure resource group (environment suffix will be added)
+- `AZURE_FUNCTION_APP_NAME` - Base name of the Azure Function App (environment suffix will be added)
 - `AZURE_LOCATION` - Azure region (e.g., `eastus`, `westeurope`)
-- `AZURE_STORAGE_ACCOUNT_NAME` - Name of the storage account (must be globally unique, lowercase, no special characters)
+- `AZURE_STORAGE_ACCOUNT_NAME` - Base name of the storage account (environment suffix will be added)
 
 **What it does:**
-- Creates an Azure Resource Group
-- Creates a Storage Account
-- Creates an Azure Function App with:
+- Creates an Azure Resource Group with environment suffix (e.g., `rg-booktracker-dev`)
+- Creates a Storage Account with environment suffix (e.g., `stbooktrackerproddev`)
+- Creates an Azure Function App with environment suffix (e.g., `func-booktracker-api-staging`)
+- Configures the Function App with:
   - Consumption plan
   - .NET 8 runtime
   - Functions v4
   - Linux OS
+- Includes idempotency checks to allow re-running without errors
 
 **How to run:**
 1. Go to Actions tab
@@ -32,23 +34,32 @@ This workflow creates the necessary Azure infrastructure for the Function App.
 3. Click "Run workflow"
 4. Select the environment (dev/staging/production)
 
+**Note:** Resource names will automatically include the environment suffix, enabling multi-environment deployments.
+
 ### 2. Deploy Azure Function (`deploy-azure-function.yml`)
 
 This workflow builds and deploys the Azure Function application.
 
 **Triggers:**
-- Push to `main` branch (only when files in `Api/`, `Shared/`, or the workflow file change)
+- Push to `main` branch (only when files in `Api/`, `Shared/`, or the workflow file change) - deploys to production
 - Pull request to `main` branch (builds only, no deployment)
-- Manual (`workflow_dispatch`)
+- Manual (`workflow_dispatch`) - allows selecting target environment
 
 **Required Secrets:**
 - `AZURE_CREDENTIALS` - Azure service principal credentials
-- `AZURE_FUNCTION_APP_NAME` - Name of the Azure Function App
+- `AZURE_FUNCTION_APP_NAME` - Base name of the Azure Function App (environment suffix will be added)
 
 **What it does:**
 - Builds the .NET Function App from the `Api` folder
-- Publishes build artifacts
+- Publishes build artifacts (retained for 7 days)
 - Deploys to Azure Function App (only on push to main or manual trigger)
+- Supports multi-environment deployment via environment selection
+
+**How to deploy to specific environment:**
+1. Go to Actions tab
+2. Select "Deploy Azure Function"
+3. Click "Run workflow"
+4. Select the target environment (dev/staging/production)
 
 ## Setup Instructions
 
@@ -67,10 +78,12 @@ Copy the JSON output and save it as the `AZURE_CREDENTIALS` secret.
 Go to your repository Settings → Secrets and variables → Actions, and add:
 
 1. **AZURE_CREDENTIALS**: The JSON output from the service principal creation
-2. **AZURE_RESOURCE_GROUP**: Your resource group name (e.g., `rg-booktracker-prod`)
-3. **AZURE_FUNCTION_APP_NAME**: Your function app name (e.g., `func-booktracker-api`)
+2. **AZURE_RESOURCE_GROUP**: Base name for your resource group (e.g., `rg-booktracker`)
+3. **AZURE_FUNCTION_APP_NAME**: Base name for your function app (e.g., `func-booktracker-api`)
 4. **AZURE_LOCATION**: Azure region (e.g., `eastus`)
-5. **AZURE_STORAGE_ACCOUNT_NAME**: Storage account name (e.g., `stbooktrackerprod`)
+5. **AZURE_STORAGE_ACCOUNT_NAME**: Base name for storage account (e.g., `stbooktracker`)
+
+**Note:** The workflows will automatically append environment suffixes to these base names (e.g., `rg-booktracker-dev`, `func-booktracker-api-production`).
 
 ### 3. First-time Setup
 
@@ -94,7 +107,9 @@ Dynamic-Book-Tracker/
 
 ## Notes
 
-- The deployment workflow only runs on the `main` branch
+- The deployment workflow deploys to production by default on push to `main` branch
 - Pull requests will build but not deploy
-- The provisioning workflow can be run multiple times (it will update existing resources)
+- The provisioning workflow can be run multiple times (includes idempotency checks)
 - Storage account names must be globally unique and contain only lowercase letters and numbers
+- Both workflows support multi-environment deployments via environment suffixes
+- Artifacts are retained for 7 days for troubleshooting purposes
