@@ -1,0 +1,78 @@
+name: Provision Azure Function
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to provision'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set environment variables
+        run: |
+          echo "RESOURCE_GROUP=${{ secrets.AZURE_RESOURCE_GROUP }}" >> $GITHUB_ENV
+          echo "FUNCTION_APP_NAME=${{ secrets.AZURE_FUNCTION_APP_NAME }}" >> $GITHUB_ENV
+          echo "LOCATION=${{ secrets.AZURE_LOCATION }}" >> $GITHUB_ENV
+          echo "STORAGE_ACCOUNT_NAME=${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}" >> $GITHUB_ENV
+
+      - name: Create Resource Group
+        run: |
+          az group create \
+            --name ${{ env.RESOURCE_GROUP }} \
+            --location ${{ env.LOCATION }}
+
+      - name: Create Storage Account
+        run: |
+          az storage account create \
+            --name ${{ env.STORAGE_ACCOUNT_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --location ${{ env.LOCATION }} \
+            --sku Standard_LRS \
+            --kind StorageV2
+
+      - name: Create Function App
+        run: |
+          az functionapp create \
+            --name ${{ env.FUNCTION_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --storage-account ${{ env.STORAGE_ACCOUNT_NAME }} \
+            --consumption-plan-location ${{ env.LOCATION }} \
+            --runtime dotnet \
+            --runtime-version 8 \
+            --functions-version 4 \
+            --os-type Linux
+
+      - name: Configure App Settings
+        run: |
+          az functionapp config appsettings set \
+            --name ${{ env.FUNCTION_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --settings \
+              "ENVIRONMENT=${{ github.event.inputs.environment }}"
+
+      - name: Summary
+        run: |
+          echo "### Azure Function Provisioning Complete :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Resource Group**: ${{ env.RESOURCE_GROUP }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Function App**: ${{ env.FUNCTION_APP_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Location**: ${{ env.LOCATION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
