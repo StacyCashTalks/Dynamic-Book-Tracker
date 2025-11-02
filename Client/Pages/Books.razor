@@ -1,8 +1,10 @@
 @page "/books"
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@using StacyClouds.SwaAuth.Client
 @attribute [Authorize]
 @inject HttpClient Http
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IJSRuntime JS
 
 <PageTitle>Books</PageTitle>
@@ -73,14 +75,14 @@ else
                         </p>
 
                         <AuthorizeView>
-                            @if (book.OwnerId == context.User.Claims.FirstOrDefault(c => c.Type == "sub")?.Value)
+                            @if (book.OwnerId == _userId)
                             {
                                 <div class="mb-2">
                                     <span class="badge bg-info">Your Book</span>
                                 </div>
                                 @if (!book.InStock)
                                 {
-                                    <button class="btn btn-sm btn-warning" @onclick="@(() => ReturnBook(book.Id))">Mark as Returned</button>
+                                    <button class="btn btn-sm btn-warning" @onclick="@(() => ReturnBook(book.Id, book.OwnerId))">Mark as Returned</button>
                                 }
                                 <button class="btn btn-sm btn-danger" @onclick="@(() => DeleteBook(book.Id))">Delete</button>
                             }
@@ -88,23 +90,23 @@ else
                             {
                                 @if (book.InStock)
                                 {
-                                    <button class="btn btn-sm btn-primary" @onclick="@(() => BorrowBook(book.Id))">Borrow</button>
+                                    <button class="btn btn-sm btn-primary" @onclick="@(() => BorrowBook(book.Id, book.OwnerId))">Borrow</button>
                                 }
                                 else
                                 {
                                     @if (book.LoanedToUserId == context.User.Claims.FirstOrDefault(c => c.Type == "sub")?.Value)
                                     {
-                                        <button class="btn btn-sm btn-warning" @onclick="@(() => ReturnBook(book.Id))">Return</button>
+                                        <button class="btn btn-sm btn-warning" @onclick="@(() => ReturnBook(book.Id, book.OwnerId))">Return</button>
                                     }
                                     else
                                     {
                                         @if (watchList.Any(w => w.BookId == book.Id))
                                         {
-                                            <button class="btn btn-sm btn-secondary" @onclick="@(() => UnwatchBook(book.Id))">Unwatch</button>
+                                            <button class="btn btn-sm btn-secondary" @onclick="@(() => UnwatchBook(book.Id, book.OwnerId))">Unwatch</button>
                                         }
                                         else
                                         {
-                                            <button class="btn btn-sm btn-outline-primary" @onclick="@(() => WatchBook(book.Id))">Notify Me</button>
+                                            <button class="btn btn-sm btn-outline-primary" @onclick="@(() => WatchBook(book.Id, book.OwnerId))">Notify Me</button>
                                         }
                                     }
                                 }
@@ -123,11 +125,15 @@ else
     private Book newBook = new();
     private bool showAddForm = false;
     private string? notification;
+    private string? _userId;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadBooks();
         await LoadWatchList();
+
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _userId = state.User.Claims.FirstOrDefault(claim => claim.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier").Value;
     }
 
     private async Task LoadBooks()
@@ -182,11 +188,11 @@ else
         }
     }
 
-    private async Task BorrowBook(string bookId)
+    private async Task BorrowBook(string bookId, string bookOwnerId)
     {
         try
         {
-            var response = await Http.PostAsync($"/api/books/{bookId}/borrow", null);
+            var response = await Http.PostAsync($"/api/books/{bookId}/{bookOwnerId}/borrow", null);
             if (response.IsSuccessStatusCode)
             {
                 notification = "Book borrowed successfully!";
@@ -203,11 +209,11 @@ else
         }
     }
 
-    private async Task ReturnBook(string bookId)
+    private async Task ReturnBook(string bookId, string bookOwnerId)
     {
         try
         {
-            var response = await Http.PostAsync($"/api/books/{bookId}/return", null);
+            var response = await Http.PostAsync($"/api/books/{bookId}/{bookOwnerId}/return", null);
             if (response.IsSuccessStatusCode)
             {
                 notification = "Book returned successfully!";
@@ -249,7 +255,7 @@ else
         }
     }
 
-    private async Task WatchBook(string bookId)
+    private async Task WatchBook(string bookId, string ownerId)
     {
         try
         {
@@ -270,7 +276,7 @@ else
         }
     }
 
-    private async Task UnwatchBook(string bookId)
+    private async Task UnwatchBook(string bookId, string ownerId)
     {
         try
         {
