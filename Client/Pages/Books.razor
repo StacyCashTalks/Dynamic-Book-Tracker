@@ -1,11 +1,13 @@
 @page "/books"
+@using Client.Services
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
-@using StacyClouds.SwaAuth.Client
 @attribute [Authorize]
 @inject HttpClient Http
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IJSRuntime JS
+@inject WebPubSubService WebPubSubService
+@implements IDisposable
 
 <PageTitle>Books</PageTitle>
 
@@ -21,6 +23,13 @@
 
 <div class="mb-3">
     <button class="btn btn-primary" @onclick="ShowAddBookForm">Add New Book</button>
+</div>
+
+<div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">Connection Status</h5>
+    <span class="badge @(WebPubSubService.IsConnected ? "bg-success" : "bg-danger")">
+        @(WebPubSubService.IsConnected ? "Connected" : "Disconnected")
+    </span>
 </div>
 
 @if (showAddForm)
@@ -129,11 +138,24 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadBooks();
-        await LoadWatchList();
+        WebPubSubService.OnMessageReceived += OnMessageReceived;
+        WebPubSubService.OnConnectionStateChanged += OnConnectionStateChanged;
+        
+        Task[] startTasks =
+        [
+            LoadBooks(),
+            LoadWatchList(),
+            GetWebPubSub()
+        ];
+        await Task.WhenAll(startTasks);
 
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         _userId = state.User.Claims.FirstOrDefault(claim => claim.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier").Value;
+    }
+
+    private async Task GetWebPubSub()
+    {
+        await WebPubSubService.ConnectAsync();
     }
 
     private async Task LoadBooks()
@@ -295,5 +317,22 @@ else
         {
             notification = $"Error: {ex.Message}";
         }
+    }
+    
+    private void OnConnectionStateChanged(bool connected)
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnMessageReceived(Notification message)
+    {
+        notification = message.Message;
+        InvokeAsync(StateHasChanged);
+    }
+    
+    public void Dispose()
+    {
+        WebPubSubService.OnMessageReceived -= OnMessageReceived;
+        WebPubSubService.OnConnectionStateChanged -= OnConnectionStateChanged;
     }
 }

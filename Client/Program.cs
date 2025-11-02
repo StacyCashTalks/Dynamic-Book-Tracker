@@ -12,5 +12,6 @@ builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.
 builder.Services.AddStaticWebAppsAuthentication();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<WebPubSubService>();
 
 await builder.Build().RunAsync();

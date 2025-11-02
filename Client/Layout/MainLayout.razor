@@ -59,22 +59,7 @@
 
         if (user.Identity?.IsAuthenticated == true)
         {
-            var userId = user.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
-            if (!string.IsNullOrEmpty(userId))
-            {
-                try
-                {
-                    var response = await Http.GetFromJsonAsync<WebPubSubConnection>("/api/webpubsub/negotiate");
-                    if (response != null && !string.IsNullOrEmpty(response.Url))
-                    {
-                        await NotificationService.InitializeAsync(response.Url, userId);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error connecting to notifications: {ex.Message}");
-                }
-            }
+            
         }
     }
 

@@ -25,9 +25,9 @@ public class WebPubSubConnectionFunction
 
         var cosmosClient = new CosmosClient(configuration["CosmosDbConnectionString"]);
         var databaseName = configuration["CosmosDbDatabaseName"] ?? "BookTracker";
-        var containerName = configuration["CosmosDbContainerName"] ?? "WatchList";
+        var containerName = configuration["CosmosDbWatchListContainerName"] ?? "WatchList";
         var database = cosmosClient.GetDatabase(databaseName);
-        _watchListContainer = database.GetContainer("WatchList");
+        _watchListContainer = database.GetContainer(containerName);
     }
     
     [Function("negotiate")]
@@ -49,7 +49,7 @@ public class WebPubSubConnectionFunction
             var webPubSubServiceClient = _webPubSub.Client;
 
             // Get all books the user is watching
-            var query = new QueryDefinition("SELECT * FROM c WHERE c.UserId = @userId")
+            var query = new QueryDefinition("SELECT * FROM c WHERE c.userId = @userId")
                 .WithParameter("@userId", user!.UserId);
 
             var iterator = _watchListContainer.GetItemQueryIterator<WatchList>(query);
@@ -97,9 +97,4 @@ public class WebPubSubConnectionFunction
             return new StatusCodeResult(500);
         }
     }
-}
-
-public class ConnectionResponse
-{
-    public string Url { get; set; } = string.Empty;
 }
