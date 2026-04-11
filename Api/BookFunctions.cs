@@ -158,6 +158,13 @@ public class BookFunctions
             book.LoanedToUserId = user!.UserId!;
 
             var updateResponse = await _booksContainer.ReplaceItemAsync(book, id, new PartitionKey(book.OwnerId));
+            await PublishBookStateChangeAsync(
+                "BookBorrowed",
+                $"'{book.Name}' has been borrowed.",
+                updateResponse.Resource,
+                updateResponse.Resource.OwnerId,
+                updateResponse.Resource.LoanedToUserId);
+
             return new OkObjectResult(updateResponse.Resource);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -196,21 +203,12 @@ public class BookFunctions
             book.LoanedToUserId = null;
 
             var updateResponse = await _booksContainer.ReplaceItemAsync(book, id, new PartitionKey(book.OwnerId));
-
-            if (!string.IsNullOrWhiteSpace(borrowedByUserId))
-            {
-                var borrowerNotification = new Notification
-                {
-                    Type = "BookReturned",
-                    Message = $"'{book.Name}' has been returned and is now available again",
-                    Book = updateResponse.Resource
-                };
-
-                await _webPubSub.Client.SendToUserAsync(
-                    borrowedByUserId,
-                    JsonSerializer.Serialize(borrowerNotification),
-                    Azure.Core.ContentType.ApplicationJson);
-            }
+            await PublishBookStateChangeAsync(
+                "BookReturned",
+                $"'{book.Name}' has been returned and is now available again.",
+                updateResponse.Resource,
+                updateResponse.Resource.OwnerId,
+                borrowedByUserId);
 
             return new OkObjectResult(updateResponse.Resource);
         }
@@ -247,5 +245,24 @@ public class BookFunctions
         {
             return new NoContentResult();
         }
+    }
+
+    private Task PublishBookStateChangeAsync(string type, string message, Book book, params string?[] relevantUserIds)
+    {
+        var notification = new Notification
+        {
+            Type = type,
+            Message = message,
+            Book = book,
+            RelevantUserIds = relevantUserIds
+                .Where(userId => !string.IsNullOrWhiteSpace(userId))
+                .Select(userId => userId!)
+                .Distinct(StringComparer.Ordinal)
+                .ToList()
+        };
+
+        return _webPubSub.Client.SendToAllAsync(
+            JsonSerializer.Serialize(notification),
+            Azure.Core.ContentType.ApplicationJson);
     }
 }

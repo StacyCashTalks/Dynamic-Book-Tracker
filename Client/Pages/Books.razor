@@ -395,18 +395,38 @@
 
     private async Task HandleRealtimeUpdateAsync(Notification message)
     {
-        notification = message.Message;
-        lastRealtimeNotification = message;
-        lastRealtimeBookId = message.Book?.Id;
-        lastRealtimeBookName = message.Book?.Name;
-
         if (message.Book is not null)
         {
             await LoadBooks();
-            await LoadWatchList();
+        }
+
+        if (ShouldShowRealtimeAcknowledgement(message))
+        {
+            notification = message.Message;
+            lastRealtimeNotification = message;
+            lastRealtimeBookId = message.Book?.Id;
+            lastRealtimeBookName = message.Book?.Name;
         }
 
         await InvokeAsync(StateHasChanged);
+    }
+
+    private bool ShouldShowRealtimeAcknowledgement(Notification message)
+    {
+        if (message.Book is null)
+        {
+            return false;
+        }
+
+        var isWatcher = watchList?.Any(w => w.BookId == message.Book.Id) == true;
+        var isRelevantUser = !string.IsNullOrWhiteSpace(_userId)
+            && message.RelevantUserIds.Contains(_userId, StringComparer.Ordinal);
+        var isCurrentBorrower = message.Book.LoanedToUserId == _userId;
+
+        return isWatcher
+            || isRelevantUser
+            || message.Book.OwnerId == _userId
+            || isCurrentBorrower;
     }
 
     public void Dispose()
