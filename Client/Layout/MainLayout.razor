@@ -1,9 +1,7 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 @using Microsoft.AspNetCore.Components.Authorization
 @using Client.Services
 @inject NotificationService NotificationService
-@inject HttpClient Http
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @implements IDisposable
 
 @if (notifications.Any())
@@ -11,12 +9,15 @@
     <div class="notification-toast-container">
         @foreach (var notification in notifications)
         {
-            <div class="toast show" role="alert">
-                <div class="toast-header">
-                    <strong class="me-auto">@notification.Type</strong>
-                    <button type="button" class="btn-close" @onclick="@(() => RemoveNotification(notification))"></button>
+            <div class="app-toast card-surface" role="alert">
+                <div class="app-toast-header">
+                    <div>
+                        <span class="app-toast-label">Live update</span>
+                        <strong>@notification.Type</strong>
+                    </div>
+                    <button type="button" class="btn-close" @onclick="@(() => RemoveNotification(notification))" aria-label="Dismiss notification"></button>
                 </div>
-                <div class="toast-body">
+                <div class="app-toast-body">
                     @notification.Message
                 </div>
             </div>
@@ -30,83 +31,71 @@
     </div>
 
     <main>
-        <div class="top-row px-4">
+        <div class="top-row">
+            <div class="top-row-title">
+                <span class="top-row-kicker">Demo mode</span>
+                <strong>Dynamic Book Tracker</strong>
+            </div>
+
             <AuthorizeView>
                 <Authorized>
-                    <span>Welcome, @context.User.Identity?.Name!</span>
+                    <div class="top-row-actions">
+                        <span class="welcome-pill">Welcome, @context.User.Identity?.Name</span>
+                        <a class="btn btn-outline-secondary" href="/books">Open library</a>
+                        <a class="btn btn-outline-secondary" href="/.auth/logout">Log out</a>
+                    </div>
                 </Authorized>
                 <NotAuthorized>
-                    <a href="/.auth/login/aad">Login</a>
+                    <div class="top-row-actions">
+                        <a class="btn btn-primary" href="/.auth/login/aad">Log in</a>
+                    </div>
                 </NotAuthorized>
             </AuthorizeView>
         </div>
 
-        <article class="content px-4">
+        <article class="content">
             @Body
         </article>
     </main>
 </div>
 
 @code {
-    private List<Notification> notifications = new();
+    private readonly List<Notification> notifications = [];
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         NotificationService.OnNotificationReceived += HandleNotification;
-
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-
-        if (user.Identity?.IsAuthenticated == true)
-        {
-            
-        }
     }
 
     private void HandleNotification(Notification notification)
     {
-        notifications.Add(notification);
-        StateHasChanged();
+        notifications.Insert(0, notification);
 
-        // Auto-remove notification after 5 seconds
-        Task.Delay(5000).ContinueWith(_ =>
+        if (notifications.Count > 4)
         {
-            RemoveNotification(notification);
-        });
+            notifications.RemoveAt(notifications.Count - 1);
+        }
+
+        _ = DismissLaterAsync(notification);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task DismissLaterAsync(Notification notification)
+    {
+        await Task.Delay(5000);
+        await InvokeAsync(() => RemoveNotification(notification));
     }
 
     private void RemoveNotification(Notification notification)
     {
-        notifications.Remove(notification);
-        StateHasChanged();
+        if (notifications.Remove(notification))
+        {
+            StateHasChanged();
+        }
     }
 
     public void Dispose()
     {
         NotificationService.OnNotificationReceived -= HandleNotification;
     }
-
-    private class WebPubSubConnection
-    {
-        public string Url { get; set; } = string.Empty;
-    }
 }
-
-<style>
-    .notification-toast-container {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 9999;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-
-    .toast {
-        min-width: 300px;
-        background-color: white;
-        border: 1px solid rgba(0,0,0,.1);
-        box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15);
-    }
-</style>

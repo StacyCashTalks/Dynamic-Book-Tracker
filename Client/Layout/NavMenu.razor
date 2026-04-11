@@ -1,6 +1,13 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">Client</a>
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid nav-header">
+        <a class="navbar-brand" href="">
+            <span class="brand-mark">B</span>
+            <span>
+                <strong>The Reading Nook</strong>
+                <small>Realtime borrowing demo</small>
+            </span>
+        </a>
+
         <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
             <span class="navbar-toggler-icon"></span>
         </button>
@@ -11,15 +18,22 @@
     <nav class="nav flex-column">
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span>
+                <span>Home</span>
             </NavLink>
         </div>
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="books">
-                <span class="bi bi-book-fill-nav-menu" aria-hidden="true"></span> Books
+                <span class="bi bi-book-fill-nav-menu" aria-hidden="true"></span>
+                <span>Books</span>
             </NavLink>
         </div>
     </nav>
+
+    <div class="sidebar-footer">
+        <p class="sidebar-label">Demo focus</p>
+        <p>Show a live book change and let the interface update itself while your audience watches.</p>
+    </div>
 </div>
 
 @code {

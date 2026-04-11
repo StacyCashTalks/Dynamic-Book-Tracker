@@ -11,136 +11,193 @@
 
 <PageTitle>Books</PageTitle>
 
-<h1>Book Library</h1>
+<div class="books-shell">
+    <section class="books-hero card-surface">
+        <div>
+            <p class="books-kicker">Live library</p>
+            <h1>Demo the library in real time.</h1>
+            <p class="books-lead">
+                Add, borrow, return, and watch books while the interface responds to Web PubSub updates as they arrive.
+            </p>
+        </div>
 
-@if (notification != null)
-{
-    <div class="alert alert-info alert-dismissible fade show" role="alert">
-        @notification
-        <button type="button" class="btn-close" @onclick="@(() => notification = null)"></button>
-    </div>
-}
+        <div class="hero-actions">
+            <button class="btn btn-primary btn-lg" @onclick="ShowAddBookForm">Add a new book</button>
 
-<div class="mb-3">
-    <button class="btn btn-primary" @onclick="ShowAddBookForm">Add New Book</button>
-</div>
+            <div class="connection-card @(WebPubSubService.IsConnected ? "connected" : "disconnected")">
+                <span class="connection-label">Web PubSub</span>
+                <strong>@(WebPubSubService.IsConnected ? "Connected" : "Disconnected")</strong>
+            </div>
+        </div>
+    </section>
 
-<div class="card-header d-flex justify-content-between align-items-center">
-    <h5 class="mb-0">Connection Status</h5>
-    <span class="badge @(WebPubSubService.IsConnected ? "bg-success" : "bg-danger")">
-        @(WebPubSubService.IsConnected ? "Connected" : "Disconnected")
-    </span>
-</div>
+    @if (notification != null)
+    {
+        <div class="app-banner info">
+            <div>
+                <strong>Update</strong>
+                <div>@notification</div>
+            </div>
+            <button type="button" class="btn-close" @onclick="@(() => notification = null)" aria-label="Dismiss update"></button>
+        </div>
+    }
 
-@if (showAddForm)
-{
-    <div class="card mb-3">
-        <div class="card-body">
-            <h5 class="card-title">Add New Book</h5>
-            <EditForm Model="newBook" OnValidSubmit="AddBook">
-                <div class="mb-3">
+    @if (lastRealtimeNotification != null)
+    {
+        <div class="app-banner live">
+            <div>
+                <strong>Live refresh received</strong>
+                <div>@lastRealtimeNotification.Message</div>
+            </div>
+            @if (lastRealtimeBookName is not null)
+            {
+                <span class="live-book-pill">@lastRealtimeBookName</span>
+            }
+        </div>
+    }
+
+    @if (showAddForm)
+    {
+        <section class="card-surface add-book-panel">
+            <div class="section-heading">
+                <div>
+                    <p class="section-label">Collection</p>
+                    <h2>Add a book to the shelf</h2>
+                </div>
+            </div>
+
+            <EditForm Model="newBook" OnValidSubmit="AddBook" class="add-book-form">
+                <div>
                     <label class="form-label">Name</label>
                     <InputText class="form-control" @bind-Value="newBook.Name" />
                 </div>
-                <div class="mb-3">
+                <div>
                     <label class="form-label">Author</label>
                     <InputText class="form-control" @bind-Value="newBook.Author" />
                 </div>
-                <button type="submit" class="btn btn-success">Save</button>
-                <button type="button" class="btn btn-secondary" @onclick="@(() => showAddForm = false)">Cancel</button>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save book</button>
+                    <button type="button" class="btn btn-outline-secondary" @onclick="@(() => showAddForm = false)">Cancel</button>
+                </div>
             </EditForm>
-        </div>
-    </div>
-}
+        </section>
+    }
 
-@if (books == null)
-{
-    <p><em>Loading...</em></p>
-}
-else if (!books.Any())
-{
-    <p>No books available. Add your first book!</p>
-}
-else
-{
-    <div class="row">
-        @foreach (var book in books)
-        {
-            <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">@book.Name</h5>
-                        <p class="card-text">
-                            <strong>Author:</strong> @book.Author<br/>
-                            <strong>Status:</strong>
-                            @if (book.InStock)
-                            {
-                                <span class="badge bg-success">Available</span>
-                            }
-                            else
-                            {
-                                <span class="badge bg-danger">Borrowed</span>
-                            }
-                        </p>
+    @if (books == null)
+    {
+        <section class="card-surface empty-state">
+            <p><em>Loading the library...</em></p>
+        </section>
+    }
+    else if (!books.Any())
+    {
+        <section class="card-surface empty-state">
+            <h2>Your shelves are ready.</h2>
+            <p>No books are available yet. Add the first title to start the demo.</p>
+        </section>
+    }
+    else
+    {
+        <section class="section-heading">
+            <div>
+                <p class="section-label">Books</p>
+                <h2>@books.Count title@(books.Count == 1 ? string.Empty : "s") ready for the demo</h2>
+            </div>
+        </section>
 
-                        <AuthorizeView>
-                            @if (book.OwnerId == _userId)
+        <section class="book-grid">
+            @foreach (var book in books)
+            {
+                var isOwner = book.OwnerId == _userId;
+                var isLoanedToCurrentUser = book.LoanedToUserId == _userId;
+                var isWatched = watchList?.Any(w => w.BookId == book.Id) == true;
+                var isHighlighted = lastRealtimeBookId == book.Id;
+
+                <article class="card-surface book-card @(isHighlighted ? "highlighted" : null)">
+                    <div class="book-card-header">
+                        <div>
+                            <p class="book-eyebrow">Featured title</p>
+                            <h3>@book.Name</h3>
+                        </div>
+                        <span class="status-pill @(book.InStock ? "available" : "borrowed")">
+                            @(book.InStock ? "Available" : "Borrowed")
+                        </span>
+                    </div>
+
+                    <p class="book-meta">by <strong>@book.Author</strong></p>
+
+                    <div class="book-tags">
+                        @if (isOwner)
+                        {
+                            <span class="tag owner">Your book</span>
+                        }
+
+                        @if (!book.InStock && isLoanedToCurrentUser)
+                        {
+                            <span class="tag accent">On loan to you</span>
+                        }
+
+                        @if (isWatched)
+                        {
+                            <span class="tag muted">Watching for availability</span>
+                        }
+                    </div>
+
+                    <div class="book-card-footer">
+                        <div class="book-card-status">
+                            <span class="mini-label">Shelf status</span>
+                            <strong>@(book.InStock ? "Ready to borrow" : "Currently out with a reader")</strong>
+                        </div>
+
+                        <div class="book-actions">
+                            @if (isOwner)
                             {
-                                <div class="mb-2">
-                                    <span class="badge bg-info">Your Book</span>
-                                </div>
                                 @if (!book.InStock)
                                 {
-                                    <button class="btn btn-sm btn-warning" @onclick="@(() => ReturnBook(book.Id, book.OwnerId))">Mark as Returned</button>
+                                    <button class="btn btn-secondary" @onclick="@(() => ReturnBook(book.Id, book.OwnerId))">Mark as returned</button>
                                 }
-                                <button class="btn btn-sm btn-danger" @onclick="@(() => DeleteBook(book.Id))">Delete</button>
+                                <button class="btn btn-danger" @onclick="@(() => DeleteBook(book.Id))">Delete</button>
+                            }
+                            else if (book.InStock)
+                            {
+                                <button class="btn btn-primary" @onclick="@(() => BorrowBook(book.Id, book.OwnerId))">Borrow</button>
+                            }
+                            else if (isLoanedToCurrentUser)
+                            {
+                                <button class="btn btn-secondary" @onclick="@(() => ReturnBook(book.Id, book.OwnerId))">Return</button>
+                            }
+                            else if (isWatched)
+                            {
+                                <button class="btn btn-outline-secondary" @onclick="@(() => UnwatchBook(book.Id, book.OwnerId))">Unwatch</button>
                             }
                             else
                             {
-                                @if (book.InStock)
-                                {
-                                    <button class="btn btn-sm btn-primary" @onclick="@(() => BorrowBook(book.Id, book.OwnerId))">Borrow</button>
-                                }
-                                else
-                                {
-                                    @if (book.LoanedToUserId == context.User.Claims.FirstOrDefault(c => c.Type == "sub")?.Value)
-                                    {
-                                        <button class="btn btn-sm btn-warning" @onclick="@(() => ReturnBook(book.Id, book.OwnerId))">Return</button>
-                                    }
-                                    else
-                                    {
-                                        @if (watchList.Any(w => w.BookId == book.Id))
-                                        {
-                                            <button class="btn btn-sm btn-secondary" @onclick="@(() => UnwatchBook(book.Id, book.OwnerId))">Unwatch</button>
-                                        }
-                                        else
-                                        {
-                                            <button class="btn btn-sm btn-outline-primary" @onclick="@(() => WatchBook(book.Id, book.OwnerId))">Notify Me</button>
-                                        }
-                                    }
-                                }
+                                <button class="btn btn-outline-secondary" @onclick="@(() => WatchBook(book.Id, book.OwnerId))">Notify me</button>
                             }
-                        </AuthorizeView>
+                        </div>
                     </div>
-                </div>
-            </div>
-        }
-    </div>
-}
+                </article>
+            }
+        </section>
+    }
+</div>
 
 @code {
     private List<Book>? books;
     private List<WatchList>? watchList = new();
     private Book newBook = new();
-    private bool showAddForm = false;
+    private bool showAddForm;
     private string? notification;
     private string? _userId;
+    private Notification? lastRealtimeNotification;
+    private string? lastRealtimeBookId;
+    private string? lastRealtimeBookName;
 
     protected override async Task OnInitializedAsync()
     {
         WebPubSubService.OnMessageReceived += OnMessageReceived;
         WebPubSubService.OnConnectionStateChanged += OnConnectionStateChanged;
-        
+
         Task[] startTasks =
         [
             LoadBooks(),
@@ -150,7 +207,9 @@ else
         await Task.WhenAll(startTasks);
 
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        _userId = state.User.Claims.FirstOrDefault(claim => claim.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier").Value;
+        _userId = state.User.Claims
+            .FirstOrDefault(claim => claim.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")
+            ?.Value;
     }
 
     private async Task GetWebPubSub()
@@ -195,13 +254,13 @@ else
             var response = await Http.PostAsJsonAsync("/api/books", newBook);
             if (response.IsSuccessStatusCode)
             {
-                notification = "Book added successfully!";
+                notification = "Book added successfully.";
                 showAddForm = false;
                 await LoadBooks();
             }
             else
             {
-                notification = "Error adding book";
+                notification = "Error adding book.";
             }
         }
         catch (Exception ex)
@@ -217,12 +276,12 @@ else
             var response = await Http.PostAsync($"/api/books/{bookId}/{bookOwnerId}/borrow", null);
             if (response.IsSuccessStatusCode)
             {
-                notification = "Book borrowed successfully!";
+                notification = "Book borrowed successfully.";
                 await LoadBooks();
             }
             else
             {
-                notification = "Error borrowing book";
+                notification = "Error borrowing book.";
             }
         }
         catch (Exception ex)
@@ -238,12 +297,12 @@ else
             var response = await Http.PostAsync($"/api/books/{bookId}/{bookOwnerId}/return", null);
             if (response.IsSuccessStatusCode)
             {
-                notification = "Book returned successfully!";
+                notification = "Book returned successfully.";
                 await LoadBooks();
             }
             else
             {
-                notification = "Error returning book";
+                notification = "Error returning book.";
             }
         }
         catch (Exception ex)
@@ -257,18 +316,20 @@ else
         try
         {
             var confirmed = await JS.InvokeAsync<bool>("confirm", "Are you sure you want to delete this book?");
-            if (confirmed)
+            if (!confirmed)
             {
-                var response = await Http.DeleteAsync($"/api/books/{bookId}");
-                if (response.IsSuccessStatusCode)
-                {
-                    notification = "Book deleted successfully!";
-                    await LoadBooks();
-                }
-                else
-                {
-                    notification = "Error deleting book";
-                }
+                return;
+            }
+
+            var response = await Http.DeleteAsync($"/api/books/{bookId}");
+            if (response.IsSuccessStatusCode)
+            {
+                notification = "Book deleted successfully.";
+                await LoadBooks();
+            }
+            else
+            {
+                notification = "Error deleting book.";
             }
         }
         catch (Exception ex)
@@ -284,12 +345,12 @@ else
             var response = await Http.PostAsync($"/api/watchlist/{bookId}", null);
             if (response.IsSuccessStatusCode)
             {
-                notification = "You'll be notified when this book is available!";
+                notification = "You'll be notified when this book is available.";
                 await LoadWatchList();
             }
             else
             {
-                notification = "Error adding to watch list";
+                notification = "Error adding to watch list.";
             }
         }
         catch (Exception ex)
@@ -305,12 +366,12 @@ else
             var response = await Http.DeleteAsync($"/api/watchlist/{bookId}");
             if (response.IsSuccessStatusCode)
             {
-                notification = "Removed from watch list";
+                notification = "Removed from watch list.";
                 await LoadWatchList();
             }
             else
             {
-                notification = "Error removing from watch list";
+                notification = "Error removing from watch list.";
             }
         }
         catch (Exception ex)
@@ -318,18 +379,36 @@ else
             notification = $"Error: {ex.Message}";
         }
     }
-    
+
     private void OnConnectionStateChanged(bool connected)
     {
+        notification = connected
+            ? "Live connection ready."
+            : "Live connection lost. Reconnecting when available.";
         InvokeAsync(StateHasChanged);
     }
 
     private void OnMessageReceived(Notification message)
     {
-        notification = message.Message;
-        InvokeAsync(StateHasChanged);
+        _ = HandleRealtimeUpdateAsync(message);
     }
-    
+
+    private async Task HandleRealtimeUpdateAsync(Notification message)
+    {
+        notification = message.Message;
+        lastRealtimeNotification = message;
+        lastRealtimeBookId = message.Book?.Id;
+        lastRealtimeBookName = message.Book?.Name;
+
+        if (message.Book is not null)
+        {
+            await LoadBooks();
+            await LoadWatchList();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
     public void Dispose()
     {
         WebPubSubService.OnMessageReceived -= OnMessageReceived;

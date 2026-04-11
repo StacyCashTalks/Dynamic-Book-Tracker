@@ -14,10 +14,12 @@ public class BookFunctions
 {
     private readonly ILogger<BookFunctions> _logger;
     private readonly Container _booksContainer;
+    private readonly WebPubSub _webPubSub;
 
-    public BookFunctions(ILogger<BookFunctions> logger, IConfiguration configuration)
+    public BookFunctions(ILogger<BookFunctions> logger, IConfiguration configuration, WebPubSub webPubSub)
     {
         _logger = logger;
+        _webPubSub = webPubSub;
 
         var options = new CosmosClientOptions
         {
@@ -178,6 +180,7 @@ public class BookFunctions
         {
             var response = await _booksContainer.ReadItemAsync<Book>(id, new PartitionKey(owner));
             var book = response.Resource;
+            var borrowedByUserId = book.LoanedToUserId;
 
             if (book.InStock)
             {
@@ -193,6 +196,22 @@ public class BookFunctions
             book.LoanedToUserId = null;
 
             var updateResponse = await _booksContainer.ReplaceItemAsync(book, id, new PartitionKey(book.OwnerId));
+
+            if (!string.IsNullOrWhiteSpace(borrowedByUserId))
+            {
+                var borrowerNotification = new Notification
+                {
+                    Type = "BookReturned",
+                    Message = $"'{book.Name}' has been returned and is now available again",
+                    Book = updateResponse.Resource
+                };
+
+                await _webPubSub.Client.SendToUserAsync(
+                    borrowedByUserId,
+                    JsonSerializer.Serialize(borrowerNotification),
+                    Azure.Core.ContentType.ApplicationJson);
+            }
+
             return new OkObjectResult(updateResponse.Resource);
         }
         catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)

@@ -63,24 +63,11 @@ public class WebPubSubConnectionFunction
 
             _logger.LogInformation($"User {user.UserId} is watching {watchList.Count} books");
 
-            // Add user to each book group they're watching
-            foreach (var watch in watchList)
-            {
-                try
-                {
-                    await webPubSubServiceClient.AddUserToGroupAsync(watch.BookId, user.UserId);
-                    _logger.LogInformation($"Added user {user.UserId} to group {watch.BookId}");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, $"Failed to add user {user.UserId} to group {watch.BookId}");
-                }
-            }
-
             // Generate connection URL - this is what the client will use to connect directly to Web PubSub
             var connectionUri = await webPubSubServiceClient.GetClientAccessUriAsync(
                 userId: user.UserId,
                 roles: [],
+                groups: watchList.Select(wl => wl.BookId),
                 expiresAfter: TimeSpan.FromHours(1)
             );
 
