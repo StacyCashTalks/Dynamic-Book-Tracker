@@ -402,8 +402,17 @@
 
         if (ShouldShowRealtimeAcknowledgement(message))
         {
-            notification = message.Message;
-            lastRealtimeNotification = message;
+            var acknowledgementMessage = BuildRealtimeAcknowledgementMessage(message);
+            var displayNotification = new Notification
+            {
+                Type = message.Type,
+                Message = acknowledgementMessage,
+                Book = message.Book,
+                RelevantUserIds = message.RelevantUserIds
+            };
+
+            notification = acknowledgementMessage;
+            lastRealtimeNotification = displayNotification;
             lastRealtimeBookId = message.Book?.Id;
             lastRealtimeBookName = message.Book?.Name;
         }
@@ -419,14 +428,38 @@
         }
 
         var isWatcher = watchList?.Any(w => w.BookId == message.Book.Id) == true;
-        var isRelevantUser = !string.IsNullOrWhiteSpace(_userId)
-            && message.RelevantUserIds.Contains(_userId, StringComparer.Ordinal);
-        var isCurrentBorrower = message.Book.LoanedToUserId == _userId;
+        var isOwner = message.Book.OwnerId == _userId;
 
-        return isWatcher
-            || isRelevantUser
-            || message.Book.OwnerId == _userId
-            || isCurrentBorrower;
+        return isOwner
+            || (isWatcher && message.Type == "BookReturned");
+    }
+
+    private string BuildRealtimeAcknowledgementMessage(Notification message)
+    {
+        if (message.Book is null)
+        {
+            return message.Message;
+        }
+
+        var isWatcher = watchList?.Any(w => w.BookId == message.Book.Id) == true;
+        var isOwner = message.Book.OwnerId == _userId;
+
+        if (isOwner)
+        {
+            return message.Type switch
+            {
+                "BookBorrowed" => $"Your book '{message.Book.Name}' has just been borrowed.",
+                "BookReturned" => $"Your book '{message.Book.Name}' has been returned and is ready to lend again.",
+                _ => message.Message
+            };
+        }
+
+        if (isWatcher && message.Type == "BookReturned")
+        {
+            return $"'{message.Book.Name}' by {message.Book.Author} is available again - borrow it now.";
+        }
+
+        return message.Message;
     }
 
     public void Dispose()
