@@ -8,10 +8,6 @@
         <div class="hero-copy">
             <p class="eyebrow">Realtime demo experience</p>
             <h1>Bring a cosy bookshop to life with live updates.</h1>
-            <p class="hero-lead">
-                Dynamic Book Tracker shows how Web PubSub can keep a borrowing experience feeling instant, collaborative, and presentation-ready.
-                Borrow a title, return it, or notify a watcher and the UI responds in the moment.
-            </p>
 
             <div class="hero-actions">
                 <AuthorizeView>
@@ -21,66 +17,9 @@
                     </Authorized>
                     <NotAuthorized>
                         <a class="btn btn-primary btn-lg" href="/.auth/login/aad">Log in to start the demo</a>
-                        <a class="btn btn-outline-secondary btn-lg" href="/books">Preview the library route</a>
                     </NotAuthorized>
                 </AuthorizeView>
             </div>
-
-            <AuthorizeView>
-                <Authorized>
-                    <div class="guest-note">
-                        <strong>Signed in:</strong> Head to the live library to demo borrowing, watch notifications, and real-time status changes.
-                    </div>
-                </Authorized>
-                <NotAuthorized>
-                    <div class="guest-note">
-                        <strong>Best demo flow:</strong> Start here, log in, then open the library and trigger a book change from another client to show instant updates.
-                    </div>
-                </NotAuthorized>
-            </AuthorizeView>
-        </div>
-
-        <div class="hero-card card-surface">
-            <h2>Why this works well in a demo</h2>
-            <ul class="feature-list">
-                <li><span class="feature-badge">Live</span> Book availability refreshes without manual reloading.</li>
-                <li><span class="feature-badge">Clear</span> Large contrast-rich controls stay readable on a projector.</li>
-                <li><span class="feature-badge">Simple</span> The story is easy to narrate from sign-in to live updates.</li>
-            </ul>
-
-            <div class="stat-grid">
-                <div>
-                    <span class="stat-label">Message flow</span>
-                    <strong>Web PubSub driven</strong>
-                </div>
-                <div>
-                    <span class="stat-label">Best suited for</span>
-                    <strong>Responsive UI demos</strong>
-                </div>
-                <div>
-                    <span class="stat-label">Primary interaction</span>
-                    <strong>Borrow, return, notify</strong>
-                </div>
-                <div>
-                    <span class="stat-label">Mood</span>
-                    <strong>Warm, legible, modern</strong>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="info-grid">
-        <div class="card-surface info-card">
-            <h2>How to tell the story</h2>
-            <p>Open the library, change a book's availability, and let the audience see the page update itself as the message arrives.</p>
-        </div>
-        <div class="card-surface info-card">
-            <h2>What the audience notices</h2>
-            <p>The interface stays calm and readable while still making every live change obvious enough to feel satisfying.</p>
-        </div>
-        <div class="card-surface info-card">
-            <h2>What the code demonstrates</h2>
-            <p>A lightweight UI can still feel responsive, polished, and realtime when messaging is wired cleanly into the client.</p>
         </div>
     </section>
 </div>
