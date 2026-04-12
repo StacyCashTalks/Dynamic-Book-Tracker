@@ -1,0 +1,83 @@
+name: Provision Azure Function
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to provision'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DIRECTORY_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          # We are forcing a different flow because of
+          #    MSAL issues at time of writing
+          enable-AzPSSession: false
+          allow-no-subscriptions: true
+
+      - name: Create Resource Group
+        run: |
+          az group create \
+            --name ${{ secrets.AZURE_RESOURCE_GROUP }}-${{ github.event.inputs.environment }} \
+            --location ${{ secrets.AZURE_LOCATION }} \
+            --only-show-errors || echo "Resource group may already exist"
+
+      - name: Create Storage Account
+        run: |
+          az storage account create \
+            --name ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}${{ github.event.inputs.environment }} \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }}-${{ github.event.inputs.environment }} \
+            --location ${{ secrets.AZURE_LOCATION }} \
+            --sku Standard_LRS \
+            --kind StorageV2 \
+            --only-show-errors || echo "Storage account may already exist"
+
+      - name: Create Function App
+        run: |
+          az functionapp create \
+            --name ${{ secrets.AZURE_FUNCTION_APP_NAME }}-${{ github.event.inputs.environment }} \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }}-${{ github.event.inputs.environment }} \
+            --storage-account ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}${{ github.event.inputs.environment }} \
+            --consumption-plan-location ${{ secrets.AZURE_LOCATION }} \
+            --runtime dotnet \
+            --runtime-version 8 \
+            --functions-version 4 \
+            --os-type Linux \
+            --only-show-errors || echo "Function app may already exist"
+
+      - name: Configure App Settings
+        run: |
+          az functionapp config appsettings set \
+            --name ${{ secrets.AZURE_FUNCTION_APP_NAME }}-${{ github.event.inputs.environment }} \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }}-${{ github.event.inputs.environment }} \
+            --settings \
+              "ENVIRONMENT=${{ github.event.inputs.environment }}"
+
+      - name: Summary
+        run: |
+          echo "### Azure Function Provisioning Complete :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Resource Group**: ${{ secrets.AZURE_RESOURCE_GROUP }}-${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Function App**: ${{ secrets.AZURE_FUNCTION_APP_NAME }}-${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Location**: ${{ secrets.AZURE_LOCATION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
